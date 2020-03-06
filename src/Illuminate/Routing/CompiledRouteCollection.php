@@ -27,6 +27,13 @@ class CompiledRouteCollection extends AbstractRouteCollection
     protected $attributes = [];
 
     /**
+     * An array of the routes that were added after loading the compiled routes.
+     *
+     * @var \Illuminate\Routing\RouteCollection|null
+     */
+    protected $routes;
+
+    /**
      * The router instance used by the route.
      *
      * @var \Illuminate\Routing\Router
@@ -61,20 +68,32 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function add(Route $route)
     {
-        $name = $route->getName() ?: $this->generateRouteName();
+        if (! $this->routes) {
+            $this->routes = new RouteCollection;
 
-        $this->attributes[$name] = [
-            'methods' => $route->methods(),
-            'uri' => $route->uri(),
-            'action' => $route->getAction() + ['as' => $name],
-            'fallback' => $route->isFallback,
-            'defaults' => $route->defaults,
-            'wheres' => $route->wheres,
-        ];
+            foreach ($this->mapAttributesToRoutes() as $existingRoute) {
+                $this->routes->add($existingRoute);
+            }
+        }
 
-        $this->compiled = [];
+        return $this->routes->add($route);
+    }
 
-        return $route;
+    /**
+     * Recompile the routes.
+     *
+     * @return void
+     */
+    public function recompile()
+    {
+        if ($this->routes) {
+            ['compiled' => $compiled, 'attributes' => $attributes] = $this->routes->compile();
+
+            $this->compiled = $compiled;
+            $this->attributes = $attributes;
+
+            $this->routes = null;
+        }
     }
 
     /**
@@ -87,8 +106,8 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function match(Request $request)
     {
-        if (empty($this->compiled) && $this->attributes) {
-            $this->recompileRoutes();
+        if ($this->routes) {
+            return $this->routes->match($request);
         }
 
         $route = null;
@@ -109,16 +128,6 @@ class CompiledRouteCollection extends AbstractRouteCollection
     }
 
     /**
-     * Recompile the routes from the attributes array.
-     *
-     * @return void
-     */
-    protected function recompileRoutes()
-    {
-        $this->compiled = $this->dumper()->getCompiledRoutes();
-    }
-
-    /**
      * Get routes from the collection by method.
      *
      * @param  string|null  $method
@@ -126,6 +135,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function get($method = null)
     {
+        if ($this->routes) {
+            return $this->routes->get($method);
+        }
+
         return $this->getRoutesByMethod()[$method] ?? [];
     }
 
@@ -137,6 +150,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function hasNamedRoute($name)
     {
+        if ($this->routes) {
+            return $this->routes->hasNamedRoute($name);
+        }
+
         return isset($this->attributes[$name]);
     }
 
@@ -148,6 +165,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function getByName($name)
     {
+        if ($this->routes) {
+            return $this->routes->getByName($name);
+        }
+
         return isset($this->attributes[$name]) ? $this->newRoute($this->attributes[$name]) : null;
     }
 
@@ -159,6 +180,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function getByAction($action)
     {
+        if ($this->routes) {
+            return $this->routes->getByAction($action);
+        }
+
         $attributes = collect($this->attributes)->first(function (array $attributes) use ($action) {
             return $attributes['action']['controller'] === $action;
         });
@@ -173,6 +198,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function getRoutes()
     {
+        if ($this->routes) {
+            return $this->routes->getRoutes();
+        }
+
         return $this->mapAttributesToRoutes()->values()->all();
     }
 
@@ -183,6 +212,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function getRoutesByMethod()
     {
+        if ($this->routes) {
+            return $this->routes->getRoutesByMethod();
+        }
+
         return $this->mapAttributesToRoutes()
             ->groupBy(function (Route $route) {
                 return $route->methods();
@@ -202,6 +235,10 @@ class CompiledRouteCollection extends AbstractRouteCollection
      */
     public function getRoutesByName()
     {
+        if ($this->routes) {
+            return $this->routes->getRoutesByName();
+        }
+
         return $this->mapAttributesToRoutes()->keyBy(function (Route $route) {
             return $route->getName();
         })->all();
